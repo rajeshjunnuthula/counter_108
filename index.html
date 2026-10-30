@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>108 Rounds Counter</title>
+<style>
+  :root {
+    --bg: #faf6ef;
+    --card: #ffffff;
+    --text: #2b2118;
+    --muted: #8a7b6b;
+    --accent: #d9822b;
+    --accent-dark: #b8681a;
+    --track: #eadfce;
+    --done: #d9822b;
+    --todo: #eadfce;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #17130f;
+      --card: #241e18;
+      --text: #f4ebe0;
+      --muted: #a39482;
+      --accent: #f0a04b;
+      --accent-dark: #d9822b;
+      --track: #3a3027;
+      --done: #f0a04b;
+      --todo: #3a3027;
+    }
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 20px 16px 28px;
+    gap: 18px;
+    overflow-x: hidden;
+  }
+  h1 { margin: 0; font-size: 1.1rem; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+
+  .ring-wrap { position: relative; width: min(78vw, 300px); aspect-ratio: 1; }
+  svg.ring { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .ring circle { fill: none; stroke-width: 14; }
+  .ring .track { stroke: var(--track); }
+  .ring .bar { stroke: var(--accent); stroke-linecap: round; transition: stroke-dashoffset .35s ease; }
+  .ring-text { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; pointer-events: none; }
+  .count { font-size: clamp(3.5rem, 20vw, 5.5rem); font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+  .of { color: var(--muted); font-size: 1rem; margin-top: 6px; }
+
+  .tap {
+    width: min(86vw, 340px);
+    padding: 22px 0;
+    font-size: 1.4rem;
+    font-weight: 700;
+    border: 0;
+    border-radius: 20px;
+    background: var(--accent);
+    color: #fff;
+    cursor: pointer;
+    box-shadow: 0 6px 0 var(--accent-dark);
+    transition: transform .06s, box-shadow .06s;
+  }
+  .tap:active { transform: translateY(4px); box-shadow: 0 2px 0 var(--accent-dark); }
+  .tap:disabled { background: var(--track); color: var(--muted); box-shadow: none; cursor: default; }
+
+  .row { display: flex; gap: 10px; }
+  .ghost {
+    padding: 10px 18px;
+    border-radius: 12px;
+    border: 1px solid var(--track);
+    background: var(--card);
+    color: var(--text);
+    font-size: .95rem;
+    cursor: pointer;
+  }
+  .ghost:active { transform: scale(.97); }
+  .ghost:disabled { opacity: .4; cursor: default; }
+
+  .grid {
+    width: min(94vw, 460px);
+    display: grid;
+    grid-template-columns: repeat(12, 1fr);
+    gap: 5px;
+    background: var(--card);
+    padding: 14px;
+    border-radius: 16px;
+  }
+  .dot { aspect-ratio: 1; border-radius: 50%; background: var(--todo); transition: background .2s; }
+  .dot.done { background: var(--done); }
+
+  .done-msg { color: var(--accent); font-weight: 700; font-size: 1.1rem; min-height: 1.4em; }
+</style>
+</head>
+<body>
+  <h1>Rounds walked</h1>
+
+  <div class="ring-wrap">
+    <svg class="ring" viewBox="0 0 200 200" aria-hidden="true">
+      <circle class="track" cx="100" cy="100" r="90"></circle>
+      <circle class="bar" id="bar" cx="100" cy="100" r="90"></circle>
+    </svg>
+    <div class="ring-text">
+      <div class="count" id="count">0</div>
+      <div class="of">of 108</div>
+    </div>
+  </div>
+
+  <div class="done-msg" id="msg"></div>
+
+  <button class="tap" id="add">Round completed</button>
+
+  <div class="row">
+    <button class="ghost" id="undo">Undo</button>
+    <button class="ghost" id="reset">Reset</button>
+  </div>
+
+  <div class="grid" id="grid" aria-hidden="true"></div>
+
+<script>
+  const TOTAL = 108;
+  const KEY = 'counter108.rounds';
+  const CIRC = 2 * Math.PI * 90;
+
+  const $ = id => document.getElementById(id);
+  const bar = $('bar'), countEl = $('count'), msg = $('msg');
+  const addBtn = $('add'), undoBtn = $('undo'), resetBtn = $('reset');
+
+  bar.style.strokeDasharray = CIRC;
+
+  const grid = $('grid');
+  for (let i = 0; i < TOTAL; i++) {
+    const d = document.createElement('div');
+    d.className = 'dot';
+    grid.appendChild(d);
+  }
+  const dots = grid.children;
+
+  let count = 0;
+  try {
+    const saved = parseInt(localStorage.getItem(KEY), 10);
+    if (saved >= 0 && saved <= TOTAL) count = saved;
+  } catch (e) {}
+
+  function save() {
+    try { localStorage.setItem(KEY, String(count)); } catch (e) {}
+  }
+
+  function buzz(ms) {
+    if (navigator.vibrate) navigator.vibrate(ms);
+  }
+
+  function render() {
+    countEl.textContent = count;
+    bar.style.strokeDashoffset = CIRC * (1 - count / TOTAL);
+    for (let i = 0; i < TOTAL; i++) dots[i].classList.toggle('done', i < count);
+    const finished = count >= TOTAL;
+    addBtn.disabled = finished;
+    addBtn.textContent = finished ? 'All 108 done' : 'Round completed';
+    undoBtn.disabled = count === 0;
+    resetBtn.disabled = count === 0;
+    msg.textContent = finished ? '108 rounds complete 🙏' : '';
+  }
+
+  function add() {
+    if (count >= TOTAL) return;
+    count++;
+    save(); render();
+    buzz(count === TOTAL ? [80, 60, 80, 60, 200] : 30);
+  }
+
+  function undo() {
+    if (count <= 0) return;
+    count--;
+    save(); render();
+  }
+
+  function reset() {
+    if (count === 0) return;
+    if (!confirm('Reset the counter to 0?')) return;
+    count = 0;
+    save(); render();
+  }
+
+  addBtn.addEventListener('click', add);
+  undoBtn.addEventListener('click', undo);
+  resetBtn.addEventListener('click', reset);
+
+  // Keyboard: Space/Enter/+ adds, Backspace/- undoes
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName === 'BUTTON' && (e.key === ' ' || e.key === 'Enter')) return;
+    if (e.key === ' ' || e.key === 'Enter' || e.key === '+') { e.preventDefault(); add(); }
+    else if (e.key === 'Backspace' || e.key === '-') { e.preventDefault(); undo(); }
+  });
+
+  render();
+</script>
+</body>
+</html>
